@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M Scouting | Email Confirmation</title>
+<style>
+:root{color-scheme:dark;--red:#e21d38;--bright:#ff334f;--green:#19c784}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;width:100%;font-family:Segoe UI,Arial,sans-serif;color:#fff}
+body{min-height:100vh;min-height:100dvh;display:grid;place-items:center;overflow-x:hidden;
+background-color:#080609;background-image:url('m_scouting_eyes_banner.png');background-repeat:no-repeat;background-position:center center;background-size:100% auto}
+.shade{position:fixed;inset:0;background:rgba(4,2,5,.24);pointer-events:none}
+main{position:relative;z-index:1;width:min(420px,calc(100vw - 30px));padding:32px 30px 28px;border:1px solid rgba(255,70,90,.55);border-radius:20px;
+background:rgba(15,8,13,.82);box-shadow:0 0 35px rgba(207,0,35,.2),inset 0 0 22px rgba(255,30,55,.035);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);text-align:center}
+.mark{width:48px;height:4px;background:var(--red);border-radius:9px;margin:0 auto 18px;box-shadow:0 0 14px var(--red)}
+h1{font-size:27px;letter-spacing:2px;margin:0 0 8px;font-weight:750}
+.sub{font-size:14px;color:#c9bec4;line-height:1.55;margin:0 auto 25px}
+.symbol{font-size:34px;color:#ff334f;text-shadow:0 0 20px #e0002b;margin-bottom:12px}
+#details{font-size:13px;line-height:1.6;color:#d5cbd0;margin:0 0 22px;overflow-wrap:anywhere}
+button{width:100%;border:1px solid #ff4b62;border-radius:10px;padding:14px 18px;background:linear-gradient(120deg,#a90025,#ed183c);color:white;font-weight:750;font-size:15px;letter-spacing:1px;cursor:pointer;box-shadow:0 5px 22px #a9002538;transition:filter .2s,transform .2s}
+button:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
+button:disabled{opacity:.65;cursor:wait}
+#status{min-height:20px;margin-top:15px;font-size:13px;color:#d7cdd1;line-height:1.5}
+#toast{position:fixed;z-index:5;right:20px;bottom:20px;max-width:min(380px,calc(100vw - 40px));padding:13px 17px;border-radius:11px;color:#fff;font-size:14px;font-weight:650;line-height:1.4;background:rgba(10,8,11,.96);border:1px solid var(--green);box-shadow:0 5px 28px #0009;opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .65s ease,transform .65s ease}
+#toast.show{opacity:1;transform:none}#toast.error{border-color:#ff3654}
+body.working main{animation:pulse 1.15s ease-in-out infinite alternate}
+@keyframes pulse{from{box-shadow:0 0 25px #d0003230}to{box-shadow:0 0 48px #ff163f70}}
+body.confirmed main{display:none}
+@media(max-width:600px){body{background-size:auto 100%;background-position:center center}main{padding:27px 22px 24px}h1{font-size:24px}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+</style></head>
+<body>
+<div class="shade" aria-hidden="true"></div>
+<main id="card" aria-labelledby="title">
+<div class="mark"></div><div class="symbol" aria-hidden="true">◉</div>
+<h1 id="title">M SCOUTING</h1>
+<p class="sub">Email confirmation</p>
+<p id="details">Confirm your email address to finish setting up your M Scouting account.</p>
+<button id="confirm" type="button">CONFIRM EMAIL</button>
+<div id="status" role="status" aria-live="polite">Ready when you are.</div>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* Public browser key only. Never place a Supabase service_role key in this file. */
+const SUPABASE_URL = 'https://ytsgsttiszaoymxgtkqi.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_l7dV1S39e2HVp_3maq-fKg-TTctocce';
+const btn=document.getElementById('confirm'), statusEl=document.getElementById('status'), toast=document.getElementById('toast');
+let toastTimer;
+function notice(message,ok){
+ toast.textContent=message;toast.className=ok?'':'error';void toast.offsetWidth;toast.classList.add('show');
+ clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),ok?4200:7500);
+}
+function params(){const q=new URLSearchParams(location.search),h=new URLSearchParams(location.hash.replace(/^#/,''));
+ return {q,h,get:k=>q.get(k)||h.get(k)};}
+function cleanUrl(){history.replaceState(null,'',location.pathname);}
+async function confirmEmail(){
+ if(btn.disabled)return;
+ const p=params(), get=p.get;
+ const err=get('error_description')||get('error')||get('error_code');
+ if(err){statusEl.textContent='Supabase reported an error: '+err;notice('✗ Confirmation failed. '+err,false);return;}
+ if(!window.supabase){statusEl.textContent='Could not load the verification service. Check your internet connection and retry.';notice('✗ Confirmation failed. Verification service unavailable.',false);return;}
+ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+ btn.disabled=true;btn.textContent='VERIFYING…';document.body.classList.add('working');statusEl.textContent='Contacting Supabase securely…';
+ try{
+  let user=null, error=null;
+  const tokenHash=get('token_hash'),type=get('type'),accessToken=get('access_token'),code=p.q.get('code');
+  if(tokenHash&&type){
+    const result=await sb.auth.verifyOtp({token_hash:tokenHash,type});
+    user=result.data&&result.data.user;error=result.error;
+  }else if(accessToken){
+    const result=await sb.auth.getUser(accessToken);
+    user=result.data&&result.data.user;error=result.error;
+  }else if(code){
+    const result=await sb.auth.exchangeCodeForSession(code);
+    user=result.data&&result.data.user;error=result.error;
+  }else{
+    // Some Supabase templates verify before redirecting; in that case the callback
+    // may contain no usable credential. Do not claim success without server proof.
+    throw new Error('No usable confirmation token was found. Open the newest confirmation email link. If Supabase already consumed the link, update the email template to pass token_hash and type to this page.');
+  }
+  if(error)throw error;
+  if(!user)throw new Error('Supabase did not return a user after verification.');
+  if(!user.email_confirmed_at&&!user.confirmed_at)throw new Error('Supabase has not marked this email as confirmed yet.');
+  cleanUrl();document.body.classList.remove('working');document.body.classList.add('confirmed');
+  statusEl.textContent='Email confirmed.';notice('✓ Confirmation Successful!',true);
+ }catch(e){
+  document.body.classList.remove('working');const msg=e&&e.message?e.message:'Unexpected verification error.';
+  statusEl.textContent='Confirmation could not be completed. '+msg;
+  notice('✗ Confirmation failed. '+msg,false);
+  btn.disabled=false;btn.textContent='TRY AGAIN';
+ }
+}
+btn.addEventListener('click',confirmEmail);
+</script>
+</body></html>
